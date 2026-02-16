@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Energy Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="index.html" class="nav-brand">Smart Energy System</a>
+    <div class="nav-links">
+      <a href="index.html">Home</a>
+      <a href="dashboard.html" class="active">Dashboard</a>
+    </div>
+  </nav>
+
+  <div class="dashboard-container">
+    <h2>Energy Analysis Dashboard</h2>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="power-prediction">Power Prediction</button>
+      <button class="tab-btn" data-tab="anomaly-detection">Anomaly Detection</button>
+      <button class="tab-btn" data-tab="energy-optimization">Energy Optimization</button>
+    </div>
+
+    <!-- Power Prediction Tab -->
+    <div id="power-prediction" class="tab-content active">
+      <div class="upload-section">
+        <h3>Power Prediction using Random Forest</h3>
+        <p>Upload a CSV file from any inverter or converter device. The system will auto-detect numeric columns and predict power output.</p>
+        <div class="upload-area" id="upload-area-prediction">
+          <div class="upload-icon">&#128194;</div>
+          <p>Drag &amp; drop your CSV file here or click to browse</p>
+          <input type="file" id="file-prediction" accept=".csv" hidden>
+          <button class="upload-btn" onclick="document.getElementById('file-prediction').click()">Choose File</button>
+        </div>
+        <div id="prediction-status" class="status-msg"></div>
+      </div>
+      <div id="prediction-results" class="results-section" style="display:none;">
+        <div class="metrics-row">
+          <div class="metric-card">
+            <h4>R2 Score</h4>
+            <span id="r2-score" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <h4>MSE</h4>
+            <span id="mse-value" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <h4>Samples</h4>
+            <span id="sample-count" class="metric-value">--</span>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="predictionChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="featureImportanceChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anomaly Detection Tab -->
+    <div id="anomaly-detection" class="tab-content">
+      <div class="upload-section">
+        <h3>Anomaly Detection (Isolation Forest)</h3>
+        <p>Upload device CSV data to detect abnormal energy consumption patterns. Anomalies are identified using statistical isolation methods.</p>
+        <div class="upload-area" id="upload-area-anomaly">
+          <div class="upload-icon">&#128194;</div>
+          <p>Drag &amp; drop your CSV file here or click to browse</p>
+          <input type="file" id="file-anomaly" accept=".csv" hidden>
+          <button class="upload-btn" onclick="document.getElementById('file-anomaly').click()">Choose File</button>
+        </div>
+        <div id="anomaly-status" class="status-msg"></div>
+      </div>
+      <div id="anomaly-results" class="results-section" style="display:none;">
+        <div class="metrics-row">
+          <div class="metric-card">
+            <h4>Total Samples</h4>
+            <span id="anomaly-total" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <h4>Anomalies Found</h4>
+            <span id="anomaly-count" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <h4>Anomaly Rate</h4>
+            <span id="anomaly-rate" class="metric-value">--</span>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="anomalyChart"></canvas>
+        </div>
+        <div id="anomaly-suggestions" class="suggestions-section"></div>
+      </div>
+    </div>
+
+    <!-- Energy Optimization Tab -->
+    <div id="energy-optimization" class="tab-content">
+      <div class="upload-section">
+        <h3>Energy Optimization</h3>
+        <p>Upload device CSV data to get smart energy optimization recommendations. Reduce energy waste and improve efficiency.</p>
+        <div class="upload-area" id="upload-area-optimization">
+          <div class="upload-icon">&#128194;</div>
+          <p>Drag &amp; drop your CSV file here or click to browse</p>
+          <input type="file" id="file-optimization" accept=".csv" hidden>
+          <button class="upload-btn" onclick="document.getElementById('file-optimization').click()">Choose File</button>
+        </div>
+        <div id="optimization-status" class="status-msg"></div>
+      </div>
+      <div id="optimization-results" class="results-section" style="display:none;">
+        <div class="metrics-row">
+          <div class="metric-card">
+            <h4>Original Total Power</h4>
+            <span id="original-power" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <h4>Optimized Total Power</h4>
+            <span id="optimized-power" class="metric-value">--</span>
+          </div>
+          <div class="metric-card">
+            <h4>Energy Saving</h4>
+            <span id="saving-percent" class="metric-value">--</span>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="optimizationChart"></canvas>
+        </div>
+        <div id="optimization-suggestions" class="suggestions-section"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
