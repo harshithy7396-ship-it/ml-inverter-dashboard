@@ -436,3 +436,14 @@ body {
     grid-template-columns: 1fr;
   }
 }
+/* ===== FAULT DETECTION ===== */
+.fault-heading { margin: 1.5rem 0 .75rem; font-size: 1.1rem; }
+.fault-table-wrap { overflow-x: auto; border: 1px solid rgba(128,128,128,.35); border-radius: 10px; }
+.fault-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.fault-table th, .fault-table td { padding: .6rem .75rem; text-align: left; vertical-align: top; border-bottom: 1px solid rgba(128,128,128,.25); }
+.fault-table th { background: rgba(128,128,128,.12); white-space: nowrap; }
+.fault-table td:first-child { white-space: nowrap; }
+.fault-table tr.sev-critical td:nth-child(2) { border-left: 4px solid #ef4444; }
+.fault-table tr.sev-warning td:nth-child(2) { border-left: 4px solid #f59e0b; }
+.fault-table small { opacity: .7; }
+.fault-note { margin: .5rem 0 1rem; font-size: .85rem; opacity: .8; }
