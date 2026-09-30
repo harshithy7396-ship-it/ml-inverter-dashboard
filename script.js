@@ -872,3 +872,638 @@ function handleOptimization(csvText, statusEl) {
     }
   }, 50);
 }
+// ==================== FAULT DETECTION ====================
+
+function createFaultDetectionTab() {
+    const tabs = document.querySelector(".tabs");
+    const tabContent = document.querySelector(".tab-content");
+
+    if (!tabs || !tabContent) return;
+
+    // Add tab
+    const faultTab = document.createElement("button");
+    faultTab.className = "tab";
+    faultTab.dataset.tab = "fault";
+    faultTab.textContent = "Fault Detection";
+
+    // Insert after Energy Optimization tab
+    tabs.appendChild(faultTab);
+
+    // Add content
+    const faultContent = document.createElement("div");
+    faultContent.className = "tab-pane";
+    faultContent.id = "fault";
+
+    faultContent.innerHTML = `
+        <div class="card">
+            <h2>Recorded Fault Detection</h2>
+            <p>
+                Upload hardware CSV containing
+                <b>Fault_Status</b> and <b>DateTime</b>.
+            </p>
+
+            <div class="upload-area" id="upload-area-fault">
+                <input type="file" id="file-fault" accept=".csv">
+                <label for="file-fault">
+                    Upload Fault Detection CSV
+                </label>
+            </div>
+
+            <div id="fault-status"></div>
+
+            <div class="metrics-grid">
+
+                <div class="metric-card">
+                    <h3>Fault Events</h3>
+                    <div id="fault-event-count">0</div>
+                </div>
+
+                <div class="metric-card">
+                    <h3>Fault Samples</h3>
+                    <div id="fault-sample-count">0</div>
+                </div>
+
+                <div class="metric-card">
+                    <h3>Total Fault Duration</h3>
+                    <div id="fault-total-duration">0 sec</div>
+                </div>
+
+                <div class="metric-card">
+                    <h3>Without Timestamp</h3>
+                    <div id="fault-no-time">0</div>
+                </div>
+
+            </div>
+
+            <div class="chart-container">
+                <canvas id="faultSummaryChart"></canvas>
+            </div>
+
+            <h3>Fault Type Summary</h3>
+            <div id="fault-summary-table"></div>
+
+            <h3>Fault Event Timeline</h3>
+            <div id="fault-event-table"></div>
+        </div>
+    `;
+
+    tabContent.appendChild(faultContent);
+
+    // Move Fault Detection after Energy Optimization
+    const energyTab = tabs.querySelector('[data-tab="optimization"]');
+
+    if (energyTab) {
+        energyTab.after(faultTab);
+    }
+
+    const energyContent = document.getElementById("optimization");
+
+    if (energyContent) {
+        energyContent.after(faultContent);
+    }
+}
+
+
+// Convert status into categories
+function getFaultCategories(status) {
+
+    const s = String(status)
+        .toUpperCase()
+        .trim();
+
+    if (!s || s === "NORMAL") {
+        return [];
+    }
+
+    const categories = [];
+
+    if (s.includes("CURRENT")) {
+        categories.push("CURRENT");
+    }
+
+    if (s.includes("VOLTAGE")) {
+        categories.push("VOLTAGE");
+    }
+
+    if (s.includes("TEMP")) {
+        categories.push("TEMPERATURE");
+    }
+
+    if (s.includes("MOSFET")) {
+        categories.push("MOSFET");
+    }
+
+    return categories;
+}
+
+
+// Parse DateTime
+function parseHardwareTimestamp(value) {
+
+    if (!value || String(value).trim() === "") {
+        return null;
+    }
+
+    const date = new Date(value);
+
+    if (isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date;
+}
+
+
+// Format duration
+function formatDuration(seconds) {
+
+    if (seconds === null || seconds === undefined) {
+        return "Unknown";
+    }
+
+    seconds = Math.round(seconds);
+
+    const hours = Math.floor(seconds / 3600);
+    seconds %= 3600;
+
+    const minutes = Math.floor(seconds / 60);
+    seconds %= 60;
+
+    if (hours > 0) {
+        return `${hours}h ${minutes}m ${seconds}s`;
+    }
+
+    if (minutes > 0) {
+        return `${minutes}m ${seconds}s`;
+    }
+
+    return `${seconds}s`;
+}
+
+
+// Calculate sampling interval
+function calculateSamplingInterval(rows) {
+
+    const times = rows
+        .map(row => parseHardwareTimestamp(row.DateTime))
+        .filter(t => t !== null)
+        .sort((a, b) => a - b);
+
+    if (times.length < 2) {
+        return 5000;
+    }
+
+    const differences = [];
+
+    for (let i = 1; i < times.length; i++) {
+
+        const diff = times[i] - times[i - 1];
+
+        if (diff > 0) {
+            differences.push(diff);
+        }
+    }
+
+    if (!differences.length) {
+        return 5000;
+    }
+
+    differences.sort((a, b) => a - b);
+
+    return differences[Math.floor(differences.length / 2)];
+}
+
+
+// Main fault analysis
+function analyseRecordedFaults(data) {
+
+    const samplingInterval =
+        calculateSamplingInterval(data);
+
+    const events = [];
+
+    let currentEvent = null;
+
+    for (let i = 0; i < data.length; i++) {
+
+        const status = String(data[i].Fault_Status || "")
+            .trim();
+
+        const categories = getFaultCategories(status);
+
+        // NORMAL row
+        if (categories.length === 0) {
+
+            if (currentEvent) {
+                events.push(currentEvent);
+                currentEvent = null;
+            }
+
+            continue;
+        }
+
+        const timestamp =
+            parseHardwareTimestamp(data[i].DateTime);
+
+        // Start new event
+        if (!currentEvent) {
+
+            currentEvent = {
+                start: timestamp,
+                end: timestamp,
+                samples: 0,
+                statuses: [],
+                categories: new Set(),
+                hasTimestamp: false
+            };
+        }
+
+        currentEvent.samples++;
+
+        currentEvent.statuses.push(status);
+
+        categories.forEach(c =>
+            currentEvent.categories.add(c)
+        );
+
+        if (timestamp) {
+
+            currentEvent.hasTimestamp = true;
+
+            if (
+                !currentEvent.start ||
+                timestamp < currentEvent.start
+            ) {
+                currentEvent.start = timestamp;
+            }
+
+            if (
+                !currentEvent.end ||
+                timestamp > currentEvent.end
+            ) {
+                currentEvent.end = timestamp;
+            }
+        }
+    }
+
+    // Last event
+    if (currentEvent) {
+        events.push(currentEvent);
+    }
+
+
+    // Calculate duration
+    events.forEach(event => {
+
+        if (
+            event.start &&
+            event.end
+        ) {
+
+            event.duration =
+                (event.end - event.start)
+                + samplingInterval;
+
+        } else {
+
+            event.duration = null;
+        }
+    });
+
+
+    return {
+        events,
+        samplingInterval
+    };
+}
+
+
+// Render summary
+function renderFaultSummaryTable(events) {
+
+    const summary = {};
+
+    ["CURRENT", "VOLTAGE", "TEMPERATURE", "MOSFET"]
+        .forEach(type => {
+
+            summary[type] = {
+                events: 0,
+                samples: 0,
+                duration: 0
+            };
+
+        });
+
+
+    events.forEach(event => {
+
+        event.categories.forEach(type => {
+
+            summary[type].events++;
+
+            summary[type].samples +=
+                event.samples;
+
+            if (event.duration !== null) {
+
+                summary[type].duration +=
+                    event.duration / 1000;
+            }
+
+        });
+
+    });
+
+
+    let html = `
+        <table class="data-table">
+
+            <thead>
+                <tr>
+                    <th>Fault Type</th>
+                    <th>Events</th>
+                    <th>Samples</th>
+                    <th>Total Duration</th>
+                </tr>
+            </thead>
+
+            <tbody>
+    `;
+
+
+    Object.keys(summary).forEach(type => {
+
+        html += `
+            <tr>
+                <td>${type}</td>
+                <td>${summary[type].events}</td>
+                <td>${summary[type].samples}</td>
+                <td>
+                    ${formatDuration(
+                        summary[type].duration
+                    )}
+                </td>
+            </tr>
+        `;
+
+    });
+
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+
+    document.getElementById(
+        "fault-summary-table"
+    ).innerHTML = html;
+
+    return summary;
+}
+
+
+// Render event timeline
+function renderFaultEventTable(events) {
+
+    let html = `
+        <table class="data-table">
+
+            <thead>
+                <tr>
+                    <th>Event</th>
+                    <th>Fault Type</th>
+                    <th>Start</th>
+                    <th>End</th>
+                    <th>Samples</th>
+                    <th>Duration</th>
+                </tr>
+            </thead>
+
+            <tbody>
+    `;
+
+
+    events.forEach((event, index) => {
+
+        const categories =
+            [...event.categories].join(" + ");
+
+
+        html += `
+            <tr>
+
+                <td>Fault ${index + 1}</td>
+
+                <td>
+                    ${categories || "UNKNOWN"}
+                </td>
+
+                <td>
+                    ${
+                        event.start
+                        ? event.start.toLocaleString()
+                        : "No timestamp"
+                    }
+                </td>
+
+                <td>
+                    ${
+                        event.end
+                        ? event.end.toLocaleString()
+                        : "No timestamp"
+                    }
+                </td>
+
+                <td>
+                    ${event.samples}
+                </td>
+
+                <td>
+                    ${formatDuration(
+                        event.duration === null
+                        ? null
+                        : event.duration / 1000
+                    )}
+                </td>
+
+            </tr>
+        `;
+
+    });
+
+
+    html += `
+            </tbody>
+        </table>
+    `;
+
+
+    document.getElementById(
+        "fault-event-table"
+    ).innerHTML = html;
+}
+
+
+// Chart
+function renderFaultChart(summary) {
+
+    const canvas =
+        document.getElementById(
+            "faultSummaryChart"
+        );
+
+    if (!canvas) return;
+
+    if (window.faultChart) {
+        window.faultChart.destroy();
+    }
+
+    window.faultChart = new Chart(
+        canvas,
+        {
+            type: "bar",
+
+            data: {
+
+                labels: Object.keys(summary),
+
+                datasets: [
+                    {
+                        label: "Fault Events",
+
+                        data: Object.values(summary)
+                            .map(x => x.events)
+                    }
+                ]
+
+            },
+
+            options: {
+                responsive: true,
+
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                }
+            }
+        }
+    );
+}
+
+
+// File handler
+function handleFaultDetection(data) {
+
+    if (!data || !data.length) {
+        return;
+    }
+
+
+    // Check required columns
+    if (
+        !Object.prototype.hasOwnProperty.call(
+            data[0],
+            "Fault_Status"
+        )
+    ) {
+
+        document.getElementById(
+            "fault-status"
+        ).innerHTML =
+            `<p style="color:red">
+                Fault_Status column not found.
+             </p>`;
+
+        return;
+    }
+
+
+    const result =
+        analyseRecordedFaults(data);
+
+    const events =
+        result.events;
+
+
+    const faultSamples =
+        data.filter(row =>
+            getFaultCategories(
+                row.Fault_Status
+            ).length > 0
+        ).length;
+
+
+    const noTimestamp =
+        events.filter(
+            e => !e.hasTimestamp
+        ).length;
+
+
+    const totalDuration =
+        events
+            .filter(e => e.duration !== null)
+            .reduce(
+                (sum, e) =>
+                    sum + e.duration / 1000,
+                0
+            );
+
+
+    document.getElementById(
+        "fault-event-count"
+    ).textContent = events.length;
+
+
+    document.getElementById(
+        "fault-sample-count"
+    ).textContent = faultSamples;
+
+
+    document.getElementById(
+        "fault-total-duration"
+    ).textContent =
+        formatDuration(totalDuration);
+
+
+    document.getElementById(
+        "fault-no-time"
+    ).textContent = noTimestamp;
+
+
+    const summary =
+        renderFaultSummaryTable(events);
+
+
+    renderFaultEventTable(events);
+
+    renderFaultChart(summary);
+
+
+    document.getElementById(
+        "fault-status"
+    ).innerHTML =
+        `<p style="color:green">
+            Fault analysis completed successfully.
+         </p>`;
+}
+
+
+// ==================== INITIALIZE ====================
+
+document.addEventListener(
+    "DOMContentLoaded",
+    () => {
+
+        createFaultDetectionTab();
+
+        setupUpload(
+            "file-fault",
+            "upload-area-fault",
+            handleFaultDetection,
+            "fault-status"
+        );
+
+    }
+);
