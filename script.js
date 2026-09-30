@@ -934,11 +934,27 @@ function handleOptimization(csvText, statusEl) {
 // ==================== FAULT DETECTION ====================
 
 function createFaultDetectionTab() {
+
     const tabs = document.querySelector(".tabs");
-    const tabContent = document.querySelector(".tab-content");
 
-    if (!tabs || !tabContent) return;
+    if (!tabs) return;
 
+    // Remove ALL existing Fault Detection buttons
+    tabs.querySelectorAll(".tab-btn").forEach(function(btn) {
+        if (btn.textContent.trim() === "Fault Detection") {
+            btn.remove();
+        }
+    });
+
+    // Remove old dynamically-created Fault Detection panel
+    const oldPanel =
+        document.getElementById("fault-detection");
+
+    if (oldPanel) {
+        oldPanel.remove();
+    }
+
+    // Continue with the rest of createFaultDetectionTab()
     // Add tab
     const faultTab = document.createElement("button");
     faultTab.className = "tab";
