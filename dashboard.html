@@ -37,6 +37,7 @@
       <button class="tab-btn active" data-tab="power-prediction">Power Prediction</button>
       <button class="tab-btn" data-tab="anomaly-detection">Anomaly Detection</button>
       <button class="tab-btn" data-tab="energy-optimization">Energy Optimization</button>
+      <button class="tab-btn" data-tab="fault-detection">Fault Detection</button>
     </div>
 
     <!-- Power Prediction Tab -->
@@ -146,7 +147,45 @@
       </div>
     </div>
   </div>
+<!-- Fault Detection Tab -->
+<div id="fault-detection" class="tab-content">
+  <div class="upload-section">
+    <h3>Fault Detection</h3>
+    <p>Upload device CSV (DateTime, Output_V, Input_V, Current_mA, Temperature_C). Faults are shown with time, location and probable cause.</p>
+    <div class="upload-area" id="upload-area-fault">
+      <div class="upload-icon">&#128194;</div>
+      <p>Drag &amp; drop your CSV file here or click to browse</p>
+      <input type="file" id="file-fault" accept=".csv" hidden>
+      <button class="upload-btn" onclick="document.getElementById('file-fault').click()">Choose File</button>
+    </div>
+    <div id="fault-status" class="status-msg"></div>
+  </div>
 
+  <div id="fault-results" class="results-section" style="display:none;">
+    <div class="metrics-row">
+      <div class="metric-card"><h4>Total Samples</h4><span id="fault-total" class="metric-value">--</span></div>
+      <div class="metric-card"><h4>Faulty Samples</h4><span id="fault-rows" class="metric-value">--</span></div>
+      <div class="metric-card"><h4>Fault Events</h4><span id="fault-events" class="metric-value">--</span></div>
+      <div class="metric-card"><h4>Healthy</h4><span id="fault-health" class="metric-value">--</span></div>
+    </div>
+
+    <div id="fault-summary" class="suggestions-section"></div>
+
+    <div class="chart-container"><canvas id="faultChartVoltage"></canvas></div>
+    <div class="chart-container"><canvas id="faultChartCurrent"></canvas></div>
+    <div class="chart-container"><canvas id="faultChartTemp"></canvas></div>
+
+    <h4 class="fault-heading">Fault Log (when, where, why)</h4>
+    <div class="fault-table-wrap">
+      <table class="fault-table">
+        <thead><tr><th>Time</th><th>Fault</th><th>Where</th><th>Samples (duration)</th><th>Worst reading</th><th>Probable cause</th></tr></thead>
+        <tbody id="fault-table-body"></tbody>
+      </table>
+    </div>
+    <p id="fault-table-note" class="fault-note"></p>
+    <div id="fault-notes" class="suggestion-list"></div>
+  </div>
+</div>
   <script src="script.js"></script>
 </body>
 </html>
