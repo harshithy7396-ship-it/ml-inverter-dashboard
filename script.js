@@ -367,23 +367,82 @@ function destroyChart(id) {
 // ========== TAB MANAGEMENT ==========
 
 document.addEventListener("DOMContentLoaded", function () {
-  // Tab switching
-  const tabBtns = document.querySelectorAll(".tab-btn");
-  const tabContents = document.querySelectorAll(".tab-content");
 
-  tabBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      tabBtns.forEach(b => b.classList.remove("active"));
-      tabContents.forEach(t => t.classList.remove("active"));
-      btn.classList.add("active");
-      document.getElementById(btn.dataset.tab).classList.add("active");
+    // Create Fault Detection tab
+    createFaultDetectionTab();
+
+
+    // =========================
+    // TAB SWITCHING
+    // =========================
+
+    const tabBtns =
+        document.querySelectorAll(".tab-btn");
+
+    const tabContents =
+        document.querySelectorAll(".tab-content");
+
+
+    tabBtns.forEach(function(btn) {
+
+        btn.addEventListener("click", function() {
+
+            // Hide ALL tabs
+            tabContents.forEach(function(content) {
+                content.classList.remove("active");
+            });
+
+
+            // Remove active from ALL buttons
+            tabBtns.forEach(function(button) {
+                button.classList.remove("active");
+            });
+
+
+            // Activate clicked tab
+            btn.classList.add("active");
+
+            const target =
+                document.getElementById(
+                    btn.dataset.tab
+                );
+
+            if (target) {
+                target.classList.add("active");
+            }
+
+        });
+
     });
-  });
 
-  // File upload handlers
-  setupUpload("file-prediction", "upload-area-prediction", handlePrediction, "prediction-status");
-  setupUpload("file-anomaly", "upload-area-anomaly", handleAnomaly, "anomaly-status");
-  setupUpload("file-optimization", "upload-area-optimization", handleOptimization, "optimization-status");
+
+    // =========================
+    // UPLOAD HANDLERS
+    // =========================
+
+    setupUpload(
+        "file-prediction",
+        "upload-area-prediction",
+        handlePrediction,
+        "prediction-status"
+    );
+
+
+    setupUpload(
+        "file-anomaly",
+        "upload-area-anomaly",
+        handleAnomaly,
+        "anomaly-status"
+    );
+
+
+    setupUpload(
+        "file-optimization",
+        "upload-area-optimization",
+        handleOptimization,
+        "optimization-status"
+    );
+
 });
 
 function setupUpload(inputId, areaId, handler, statusId) {
@@ -892,6 +951,7 @@ function createFaultDetectionTab() {
     // Add content
     const faultContent = document.createElement("div");
     faultContent.className = "tab-pane";
+  faultContent.style.display = "none";
     faultContent.id = "fault";
 
     faultContent.innerHTML = `
@@ -1394,116 +1454,217 @@ function renderFaultChart(summary) {
 
 
 // File handler
-function handleFaultDetection(data) {
+function handleFaultDetection(csvText, statusEl) {
 
-    if (!data || !data.length) {
+    const parsed = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        dynamicTyping: false,
+
+        // Remove BOM and spaces from CSV headers
+        transformHeader: function(header) {
+            return String(header)
+                .replace(/^\uFEFF/, "")
+                .trim();
+        }
+    });
+
+    let data = parsed.data || [];
+
+    if (data.length === 0) {
+        statusEl.textContent = "CSV contains no data.";
+        statusEl.className = "status-msg error";
         return;
     }
 
+    // Get actual CSV headers
+    const columns = Object.keys(data[0]);
 
-    // Check required columns
-    if (
-        !Object.prototype.hasOwnProperty.call(
-            data[0],
-            "Fault_Status"
-        )
-    ) {
+    console.log("CSV columns:", columns);
 
-        document.getElementById(
-            "fault-status"
-        ).innerHTML =
-            `<p style="color:red">
-                Fault_Status column not found.
-             </p>`;
+    // Find Fault_Status irrespective of spaces/case
+    function findColumn(names) {
+
+        return columns.find(function(col) {
+
+            const cleanCol = String(col)
+                .toLowerCase()
+                .replace(/[\s_]+/g, "");
+
+            return names.some(function(name) {
+
+                const cleanName = name
+                    .toLowerCase()
+                    .replace(/[\s_]+/g, "");
+
+                return cleanCol === cleanName;
+            });
+        });
+    }
+
+    const faultColumn = findColumn([
+        "Fault_Status",
+        "Fault Status",
+        "FaultStatus",
+        "Fault"
+    ]);
+
+    const dateColumn = findColumn([
+        "DateTime",
+        "Date Time",
+        "Timestamp",
+        "Time"
+    ]);
+
+    // DEBUG MESSAGE
+    console.log("Fault column:", faultColumn);
+    console.log("Date column:", dateColumn);
+
+    if (!faultColumn) {
+
+        statusEl.textContent =
+            "Fault_Status not found. Columns detected: " +
+            columns.join(", ");
+
+        statusEl.className = "status-msg error";
 
         return;
     }
 
+    if (!dateColumn) {
 
-    const result =
-        analyseRecordedFaults(data);
+        statusEl.textContent =
+            "DateTime not found. Columns detected: " +
+            columns.join(", ");
 
-    const events =
-        result.events;
+        statusEl.className = "status-msg error";
+
+        return;
+    }
+
+    // Convert actual CSV columns to standard names
+    data = data.map(function(row) {
+
+        return {
+            ...row,
+
+            Fault_Status: row[faultColumn],
+            DateTime: row[dateColumn]
+        };
+
+    });
+
+    statusEl.textContent =
+        "Analysing faults...";
+
+    statusEl.className =
+        "status-msg loading";
 
 
-    const faultSamples =
-        data.filter(row =>
-            getFaultCategories(
-                row.Fault_Status
-            ).length > 0
-        ).length;
+    setTimeout(function() {
+
+        try {
+
+            const result =
+                analyseRecordedFaults(data);
 
 
-    const noTimestamp =
-        events.filter(
-            e => !e.hasTimestamp
-        ).length;
+            // =========================
+            // UPDATE METRICS
+            // =========================
+
+            document.getElementById(
+                "fault-events"
+            ).textContent =
+                result.events.length;
 
 
-    const totalDuration =
-        events
-            .filter(e => e.duration !== null)
-            .reduce(
-                (sum, e) =>
-                    sum + e.duration / 1000,
-                0
+            document.getElementById(
+                "fault-samples"
+            ).textContent =
+                result.totalFaultSamples;
+
+
+            const totalDuration =
+                result.events.reduce(
+                    function(sum, event) {
+
+                        return sum +
+                            (
+                                event.duration !== null
+                                    ? event.duration
+                                    : 0
+                            );
+
+                    },
+                    0
+                );
+
+
+            document.getElementById(
+                "fault-duration"
+            ).textContent =
+                formatDuration(totalDuration);
+
+
+            document.getElementById(
+                "fault-untimed"
+            ).textContent =
+                result.untimedFaultSamples;
+
+
+            // =========================
+            // FAULT TABLE
+            // =========================
+
+            renderFaultSummaryTable(
+                result.summary
             );
 
 
-    document.getElementById(
-        "fault-event-count"
-    ).textContent = events.length;
+            renderFaultEventTable(
+                result.events
+            );
 
 
-    document.getElementById(
-        "fault-sample-count"
-    ).textContent = faultSamples;
+            // =========================
+            // FAULT CHART
+            // =========================
+
+            renderFaultChart(
+                result.summary
+            );
 
 
-    document.getElementById(
-        "fault-total-duration"
-    ).textContent =
-        formatDuration(totalDuration);
+            // Show results
+            document.getElementById(
+                "fault-results"
+            ).style.display = "block";
 
 
-    document.getElementById(
-        "fault-no-time"
-    ).textContent = noTimestamp;
+            statusEl.textContent =
+                "Fault analysis complete! " +
+                result.events.length +
+                " fault events found.";
+
+            statusEl.className =
+                "status-msg success";
 
 
-    const summary =
-        renderFaultSummaryTable(events);
+        } catch (error) {
 
+            console.error(
+                "Fault analysis error:",
+                error
+            );
 
-    renderFaultEventTable(events);
+            statusEl.textContent =
+                "Error: " +
+                error.message;
 
-    renderFaultChart(summary);
+            statusEl.className =
+                "status-msg error";
+        }
 
-
-    document.getElementById(
-        "fault-status"
-    ).innerHTML =
-        `<p style="color:green">
-            Fault analysis completed successfully.
-         </p>`;
+    }, 50);
 }
-
-
-// ==================== INITIALIZE ====================
-
-document.addEventListener(
-    "DOMContentLoaded",
-    () => {
-
-        createFaultDetectionTab();
-
-        setupUpload(
-            "file-fault",
-            "upload-area-fault",
-            handleFaultDetection,
-            "fault-status"
-        );
-
-    }
-);
